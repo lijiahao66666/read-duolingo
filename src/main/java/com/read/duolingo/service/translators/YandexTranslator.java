@@ -9,17 +9,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ThreadPoolExecutor;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.read.duolingo.enums.TranslatorType;
+import com.read.duolingo.utils.LanguageUtil;
+import com.read.duolingo.utils.StringUtil;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -27,105 +26,28 @@ import org.springframework.web.client.RestTemplate;
 
 @Slf4j
 @Component
-public class YandexTranslator {
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+public class YandexTranslator{
+    private final RestTemplate restTemplate = new RestTemplate();
 
-    private static List<String> translateSingleTextForService(String text, String lang, String service) throws Exception {
-        URL url = new URL("https://translate.toil.cc/v2/translate/");
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setRequestMethod("POST");
-        connection.setRequestProperty("Content-Type", "application/json");
-        connection.setDoOutput(true);
-
-        String requestBody = String.format("{\"lang\":\"%s\",\"service\":\"%s\",\"text\":\"%s\"}",
-                escapeJson(lang), escapeJson(service), escapeJson(text));
-
-        try (OutputStream os = connection.getOutputStream()) {
-            byte[] input = requestBody.getBytes(StandardCharsets.UTF_8);
-            os.write(input, 0, input.length);
-        }
-
-        int responseCode = connection.getResponseCode();
-        if (responseCode != 200) {
-            StringBuilder errorResponse = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(connection.getErrorStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    errorResponse.append(line);
-                }
-            }
-            throw new Exception(String.format("%s failed with status %d\n%s\n%s\n%s",
-                    service, responseCode, text.length(), requestBody, errorResponse.toString()));
-        }
-
-        StringBuilder response = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
-            }
-        }
-
-        JsonNode data = objectMapper.readTree(response.toString());
-        if (data != null && data.has("translations") && data.get("translations").isArray()) {
-            List<String> translations = new ArrayList<>();
-            for (JsonNode translationNode : data.get("translations")) {
-                translations.add(translationNode.asText());
-            }
-            return translations;
-        } else {
-            // fallback: return original texts if translation failed
-            return Arrays.asList(text);
-        }
-    }
-
-    public static List<String> translate(List<String> texts, String sourceLang, String targetLang) throws Exception {
-        if (texts.isEmpty()) {
-            return new ArrayList<>();
-        }
-
-        String service = "yandexgpt";
-
-        // Yandex does not accept "auto" language
-        String source_lang = sourceLang.equals("AUTO") ? "en" : normalizeToShortLang(sourceLang).toLowerCase();
-        String target_lang = normalizeToShortLang(targetLang).toLowerCase();
-        String lang = source_lang + "-" + target_lang;
-
-        List<String> translatedTexts = new ArrayList<>();
-
-        for (String text : texts) {
-            List<String> translations = translateSingleTextForService(text, lang, service);
-            translatedTexts.addAll(translations);
-        }
-
-        return translatedTexts;
-    }
-
-    private static String normalizeToShortLang(String lang) {
-        // Simplified implementation - in a real app, you would have a complete mapping
-        if (lang.contains("-")) {
-            return lang.split("-")[0];
-        }
-        return lang;
-    }
-
-    private static String escapeJson(String text) {
-        if (text == null) return "";
-        return text.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+    private String queryYandex(String source, String targetLang) throws Exception {
+        String url = "https://translate.toil.cc/v2/translate/";
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("service", "yandexgpt");
+        formData.add("text", StringUtil.escapeJson(source));
+        formData.add("lang", LanguageUtil.detectLanguage(source) + "-" + targetLang);
+        HttpEntity<MultiValueMap<String, String>> entity = new HttpEntity<>(formData, headers);
+        Object o = restTemplate.postForObject(url, entity, Object.class);
+        log.info("YandexTranslator queryYandex, source: {}, targetLang: {}, response: {}", source, targetLang, o);
+        return o.toString();
     }
 
     // For testing
     public static void main(String[] args) {
         try {
-            List<String> texts = Arrays.asList("Hello, world!", "How are you?");
-            List<String> translations = translate(texts, "en", "zh");
-            System.out.println("Translations: " + translations);
+            String translation = new YandexTranslator().queryYandex("Hello, world!", "zh");
+            System.out.println("Translation: " + translation);
         } catch (Exception e) {
             e.printStackTrace();
         }
