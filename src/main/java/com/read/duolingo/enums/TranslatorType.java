@@ -7,6 +7,5 @@ public enum TranslatorType {
     LOCAL_SEED_X,
     AZURE,
     GOOGLE,
-    YANDEX,
     ;
 }
