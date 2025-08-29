@@ -70,20 +70,29 @@ public class TranslateService {
         }
         offlineTranslateTemp.setTranslationStatus(TranslationStatus.TRANSLATING.getValue());
         translateRepository.updateOfflineTranslateTemp(offlineTranslateTemp);
-        Path tempDir = null;
         try {
-            tempDir = Files.createTempDirectory("translate_temp");
-            // 解压 EPUB 文件
-            ZipUtil.unzipEpub(getFileDir(offlineTranslateTemp.getId(), true) + offlineTranslateTemp.getFileName(), tempDir);
+            String tempDir = getFileDir(offlineTranslateTemp.getId(), true) + offlineTranslateTemp.getFileName().replace(".epub","");
+            Path tempDirPath = Path.of(tempDir);
+            // 如果tempDir存在就不用解压了
+            if (!Files.exists(tempDirPath)) {
+                Files.createDirectories(tempDirPath);
+                // 解压 EPUB 文件
+                ZipUtil.unzipEpub(getFileDir(offlineTranslateTemp.getId(), true) + offlineTranslateTemp.getFileName(), tempDirPath);
+            }
             // 处理 HTML 文件
-            HtmlUtil.processHtmlFiles(tempDir, (progress, sources) -> {
+            HtmlUtil.processHtmlFiles(tempDirPath, (progress, sources) -> {
                 List<String> targets = translateSource(sources, offlineTranslateTemp.getLangCode(), false, offlineTranslateUseTranslatorType.name());
                 offlineTranslateTemp.setProgress(progress);
                 translateRepository.updateOfflineTranslateTemp(offlineTranslateTemp);
                 return targets;
             });
             // 重新压缩为 EPUB
-            ZipUtil.zipEpub(tempDir, getFileDir(offlineTranslateTemp.getId(), false) + offlineTranslateTemp.getFileName());
+            String outFileDir = getFileDir(offlineTranslateTemp.getId(), false);
+            Path outFilePath = Paths.get(outFileDir);
+            if (!Files.exists(outFilePath)){
+                Files.createDirectories(outFilePath);
+            }
+            ZipUtil.zipEpub(tempDirPath, outFileDir + offlineTranslateTemp.getFileName());
             offlineTranslateTemp.setTranslationStatus(TranslationStatus.COMPLETED.getValue());
             offlineTranslateTemp.setProgress(100);
             translateRepository.updateOfflineTranslateTemp(offlineTranslateTemp);
@@ -96,9 +105,6 @@ public class TranslateService {
             }
             offlineTranslateTemp.setFailCount(Optional.ofNullable(offlineTranslateTemp.getFailCount()).orElse(0) + 1);
             translateRepository.updateOfflineTranslateTemp(offlineTranslateTemp);
-        } finally {
-            // 清理临时文件
-            deleteDirectory(tempDir);
         }
     }
 

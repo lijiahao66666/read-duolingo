@@ -37,6 +37,17 @@ public class TranslateController {
             return Response.fail(500, e.getMessage());
         }
     }
+
+    @RequestMapping("/offline/invoke")
+    public Response<Boolean> invokeOfflineTranslate() {
+        try {
+            translateService.offlineTranslate();
+            return Response.success(true);
+        }catch (Exception e){
+            log.error("submit offline translate error", e);
+            return Response.fail(500, e.getMessage());
+        }
+    }
     /**
      * 查询离线翻译书籍进度，0-100
      */

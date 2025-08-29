@@ -118,7 +118,7 @@ public class LocalSeedXTranslator implements Translator {
                 log.error("当前文本token超过限制，tokenCost:{}", tokenCost);
                 return "";
             }
-            log.info("调用seedx生成文本，prompt:{}，tokenCost:{}", prompt, tokenCost);
+            request.setMax_tokens(tokenCost);
 
             // 最多重试2次
             for (int i = 0; i < 2; i++) {
@@ -135,7 +135,7 @@ public class LocalSeedXTranslator implements Translator {
                     );
 
                     if (response != null && response.getChoices() != null && !response.getChoices().isEmpty()) {
-                        log.info("调用seedx生成文本成功, response:{}", JSON.toJSONString(response));
+                        log.info("调用seedx生成文本成功, requestEntity:{}, response:{}", JSON.toJSONString(requestEntity), JSON.toJSONString(response));
                         String result = response.getChoices().stream()
                                 .map(SeedXCompletionResponse.Choice::getText)
                                 .toList()

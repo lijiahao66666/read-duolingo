@@ -12,7 +12,7 @@
     </resultMap>
 
     <sql id= "BaseColumns">
-        id, translation_status, fail_count, translation_target_type, file_name, progress
+        id, translation_status, fail_count, lang_code, file_name, progress
     </sql>
 
     <insert id="insertSelective" useGeneratedKeys="true" keyProperty="id">
